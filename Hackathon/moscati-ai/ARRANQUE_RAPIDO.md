@@ -1,22 +1,43 @@
-# ARRANQUE RAPIDO — MoscatiAI v2
+# ARRANQUE RAPIDO — MoscatiAI v2 (Firebase)
 ## Guia para que los 5 empiecen a programar YA
 
 ---
 
-## PASO 0: Setup inicial (Aaron hace esto PRIMERO, los demas esperan 5 min)
+## PASO 0: Setup inicial (Aaron hace esto PRIMERO, los demas esperan 10 min)
 
+### 0A. Crear proyecto en Firebase
+```
+1. Ir a https://console.firebase.google.com
+2. Crear proyecto: "moscati-ai"
+3. Ir a Project Settings > Service Accounts
+4. Click "Generate new private key" → descarga JSON
+5. Ir a Firestore Database > Create Database > Start in test mode
+6. Seleccionar region: us-central1 (o la mas cercana)
+```
+
+### 0B. Configurar .env.local
 ```bash
-# Aaron clona y sube el repo
+# Opcion 1 (FACIL): Copiar todo el JSON del service account en una linea
+FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"moscati-ai","private_key":"-----BEGIN...","client_email":"..."}
+
+# Opcion 2: Variables individuales (copiar del JSON descargado)
+FIREBASE_PROJECT_ID=moscati-ai
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@moscati-ai.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvgI...\n-----END PRIVATE KEY-----\n"
+```
+
+### 0C. Subir repo
+```bash
 cd moscati-ai
 npm install
 git init
 git add .
-git commit -m "feat: proyecto base MoscatiAI v2"
+git commit -m "feat: proyecto base MoscatiAI v2 con Firebase"
 git remote add origin https://github.com/TU_ORG/moscati-ai.git
 git push -u origin main
 ```
 
-## PASO 1: Todos clonan (minuto 5)
+## PASO 1: Todos clonan (minuto 10)
 
 ```bash
 git clone https://github.com/TU_ORG/moscati-ai.git
@@ -45,23 +66,26 @@ git checkout -b feat/data-seed
 
 ## PASO 3: Configurar .env.local
 
-Cada quien copia `.env.local` y pone sus keys:
-```bash
-cp .env.local.example .env.local
-# Editar con sus API keys reales
+Aaron comparte las keys de Firebase por Discord/Slack privado.
+Cada quien copia `.env.local` y agrega sus propias keys:
+```
+- Aaron: FIREBASE_* (compartir con todos)
+- Max: GEMINI_API_KEY + NEXT_PUBLIC_AZURE_SPEECH_*
+- Uri: ELEVENLABS_API_KEY
 ```
 
-**Quien configura que:**
-- Aaron: MONGODB_URI (crear cluster en MongoDB Atlas)
-- Max: GEMINI_API_KEY + NEXT_PUBLIC_AZURE_SPEECH_KEY/REGION
-- Uri: ELEVENLABS_API_KEY
-- Todos: Compartir las keys por Discord/Slack privado
-
-## PASO 4: Luis ejecuta el seed (cuando Aaron tenga MongoDB listo)
+## PASO 4: Luis ejecuta el seed
 
 ```bash
 npm run seed
+# Debe mostrar:
+# ✅ 10 pacientes creados
+# ✅ 3 alertas creadas
+# ✅ 7 documentos de conocimiento médico creados
+# ✅ 20 registros de signos vitales creados
 ```
+
+**Verificar en Firebase Console:** ir a Firestore > ver colecciones patients, alerts, medical_knowledge
 
 ## PASO 5: Correr el proyecto
 
@@ -75,15 +99,15 @@ npm run dev
 ## DONDE EMPIEZA CADA QUIEN
 
 ### Aaron — Backend (hora 0)
-**Primer archivo que toca:** `src/lib/mongodb.ts`
-1. Crear MongoDB Atlas cluster (5 min)
-2. Verificar conexion: `npm run dev` y abrir `/api/patients`
-3. Revisar que todas las API routes compilen
-4. Si algo falla en los endpoints, corregir
+**Primer archivo que toca:** `src/lib/firebase.ts`
+1. Crear Firebase project + Firestore database en test mode
+2. Generar service account key
+3. Verificar conexion: `npm run dev` y abrir `/api/patients`
+4. Si retorna datos del seed → backend funciona
 
 **Archivos de Aaron (NO TOCAR si no eres Aaron):**
 ```
-src/lib/mongodb.ts
+src/lib/firebase.ts          ← conexion a Firestore
 src/app/api/patients/route.ts
 src/app/api/notes/route.ts
 src/app/api/egreso/route.ts
@@ -91,16 +115,16 @@ src/app/api/insurance/route.ts
 src/app/api/alerts/route.ts
 src/app/api/chat/route.ts
 src/app/api/audit/route.ts
+src/types/index.ts
 ```
 
 ### Max — IA/Voz (hora 0)
 **Primer archivo que toca:** `src/lib/speech.ts`
-1. Obtener Azure Speech key de portal.azure.com
-2. Si no hay key Azure en 30 min: USAR WEB SPEECH API (ya esta el fallback)
-3. Probar transcripcion: abrir `/consulta?patientId=pac-001`, presionar microfono
-4. Obtener Gemini API key de aistudio.google.com
-5. Probar que la nota SOAP se genere correctamente
-6. Ajustar prompts en `gemini.ts` si la estructura no sale bien
+1. Obtener Azure Speech key de portal.azure.com (o usar Web Speech API de inmediato)
+2. Probar transcripcion: abrir `/consulta?patientId=pac-001`, presionar microfono
+3. Obtener Gemini API key de aistudio.google.com
+4. Probar que la nota SOAP se genere correctamente
+5. Ajustar prompts en `gemini.ts` si la estructura no sale bien
 
 **Archivos de Max (NO TOCAR si no eres Max):**
 ```
@@ -114,7 +138,7 @@ src/lib/rag.ts
 1. Verificar que `npm run dev` muestre el dashboard
 2. Ajustar estilos, colores, layout del dashboard
 3. Mejorar PatientCard, AlertBanner, StatsBar
-4. Asegurar que la navegacion funcione (click en paciente -> /consulta)
+4. Asegurar que la navegacion funcione
 
 **Archivos de Cris (NO TOCAR si no eres Cris):**
 ```
@@ -130,7 +154,7 @@ src/components/StatsBar.tsx
 **Primer archivo que toca:** `src/components/VoiceRecorder.tsx`
 1. Probar que el VoiceRecorder grabe y muestre transcripcion
 2. Verificar que SOAPNoteEditor muestre la nota correctamente
-3. Probar el flujo completo: voz -> nota -> firmar -> egreso
+3. Probar el flujo completo: voz → nota → firmar → egreso
 4. Integrar ElevenLabs cuando tenga la key
 
 **Archivos de Uri (NO TOCAR si no eres Uri):**
@@ -146,14 +170,13 @@ src/app/api/voice/route.ts
 ### Luis — Data + Demo (hora 0)
 **Primer archivo que toca:** `scripts/seed.ts`
 1. Revisar que los datos de pacientes sean realistas
-2. Ejecutar `npm run seed` cuando MongoDB este listo
+2. Ejecutar `npm run seed` cuando Firebase este listo
 3. Verificar en el dashboard que aparezcan los 10 pacientes
 4. Empezar a escribir el guion del video
 
 **Archivos de Luis (NO TOCAR si no eres Luis):**
 ```
 scripts/seed.ts
-scripts/simulator.ts  (crear si da tiempo)
 ```
 
 ---
@@ -161,87 +184,84 @@ scripts/simulator.ts  (crear si da tiempo)
 ## COMO SE CONECTA TODO (flujo tecnico)
 
 ```
-USUARIO (doctor) presiona "Nueva Consulta" en el dashboard
+USUARIO (doctor) presiona "Nueva Consulta" en dashboard
          |
          v
-[page.tsx] navega a /consulta?patientId=pac-001
+[page.tsx] navega a → /consulta?patientId=pac-001
          |
          v
-[consulta/page.tsx] carga datos del paciente via GET /api/patients
+[consulta/page.tsx] carga paciente via → GET /api/patients
+  → firebase.ts → Firestore.collection('patients').doc(id).get()
          |
          v
 Doctor presiona boton de microfono
          |
          v
-[VoiceRecorder.tsx] -> [speech.ts] activa Azure Speech o Web Speech API
-         |
-         v
-Audio se transcribe en tiempo real (texto aparece en pantalla)
+[VoiceRecorder.tsx] → [speech.ts] → Azure Speech SDK o Web Speech API
+  Audio se transcribe en tiempo real (texto en pantalla)
          |
          v
 Doctor presiona STOP
          |
          v
-[consulta/page.tsx] envia POST /api/notes con { transcription, patientId }
+[consulta/page.tsx] envia → POST /api/notes
+  { transcription: "paciente de 45 años...", patientId: "pac-001" }
          |
          v
-[api/notes/route.ts] llama a:
-  1. rag.ts -> getPatientContext() -> busca en MongoDB el historial
-  2. gemini.ts -> transcriptionToSOAP() -> Gemini genera nota SOAP
-  3. Guarda nota en MongoDB
-  4. Retorna nota al frontend
+[api/notes/route.ts] ejecuta:
+  1. firebase.ts → Firestore.doc('patients/pac-001').get() → datos paciente
+  2. rag.ts → busca en Firestore 'medical_knowledge' → protocolos relevantes
+  3. gemini.ts → transcriptionToSOAP(texto, contexto) → Gemini genera SOAP
+  4. firebase.ts → Firestore.collection('notes').add(nota) → guarda
+  5. Retorna nota SOAP al frontend
          |
          v
-[SOAPNoteEditor.tsx] muestra la nota prellenada y editable
+[SOAPNoteEditor.tsx] muestra nota prellenada y editable
+  Doctor revisa → corrige si necesario → presiona "Firmar y Guardar"
          |
          v
-Doctor revisa, corrige si necesario, presiona "Firmar y Guardar"
+Nota firmada. Doctor presiona "Continuar a Egreso"
          |
          v
-[consulta/page.tsx] marca nota como firmada, registra en /api/audit
+[egreso/page.tsx] muestra checklist → presiona "Generar Documentos"
          |
          v
-Doctor presiona "Continuar a Egreso"
-         |
-         v
-[egreso/page.tsx] muestra checklist
-  - Nota firmada ✅
-  - Labs listos ✅ (simulado)
-  - Docs pendientes ⬜
-         |
-         v
-Doctor presiona "Generar Documentos"
-         |
-         v
-[egreso/page.tsx] envia POST /api/egreso con { patientId }
-         |
-         v
-[api/egreso/route.ts] llama a gemini.ts -> generateDischargeDocuments()
-  -> Genera: receta, indicaciones, resumen clinico, formato aseguradora
-  -> Retorna todo al frontend
-         |
-         v
-[egreso/page.tsx] muestra documentos generados + checklist completa
+[api/egreso/route.ts] ejecuta:
+  1. Lee nota firmada de Firestore
+  2. gemini.ts → generateDischargeDocuments() → receta, indicaciones, resumen
+  3. Retorna documentos generados
          |
          v
 Doctor presiona "Completar Egreso y Enviar a Aseguradora"
          |
          v
-[egreso/page.tsx] envia POST /api/insurance con { patientId, provider }
+[api/insurance/route.ts] → simula envio → retorna folio CLM-XXXXX
          |
          v
-[api/insurance/route.ts] simula envio, retorna folio
+[egreso/page.tsx] → confirmacion + timeline
+  [api/voice/route.ts] → elevenlabs.ts → audio: "Egreso completado"
          |
          v
-[egreso/page.tsx] muestra confirmacion + timeline
-         |
-         v
-[elevenlabs.ts] via /api/voice genera audio:
-  "Doctor, el egreso del paciente Rodriguez ha sido completado"
-         |
-         v
-Audio se reproduce en el browser. FIN DEL FLUJO.
+FIN DEL FLUJO ✅
 ```
+
+---
+
+## FIREBASE vs MONGODB — QUE CAMBIO
+
+| Antes (MongoDB) | Ahora (Firebase) |
+|------------------|------------------|
+| MongoDB Atlas cluster | Firebase Console > Firestore |
+| `MONGODB_URI` en .env | `FIREBASE_PROJECT_ID` + service account |
+| `collection.find()` | `collection().get()` |
+| `collection.insertOne()` | `collection().add()` / `doc().set()` |
+| `collection.findOne({_id})` | `doc(id).get()` |
+| `collection.updateOne()` | `doc(id).update()` |
+| Vector Search para RAG | Búsqueda por keywords en memoria (más simple) |
+| Índices manuales | Firestore crea índices automáticamente |
+| `_id` de MongoDB | `doc.id` de Firestore (mapeado con `docToObj()`) |
+
+**Ventaja para el hackathon:** Firebase setup es más rápido (no necesitas crear cluster, configurar IP whitelist, etc.). Solo creas proyecto, habilitas Firestore en test mode, y listo.
 
 ---
 
@@ -252,63 +272,58 @@ Audio se reproduce en el browser. FIN DEL FLUJO.
 git checkout feat/mi-feature
 
 # Commits frecuentes (cada 30-60 min)
-git add .
-git commit -m "feat: descripcion corta de lo que hice"
+git add . && git commit -m "feat: descripcion corta"
 git push origin feat/mi-feature
 
 # Para traer cambios de main a tu rama:
 git pull origin main
-# Si hay conflictos: resuelve y haz commit
 
-# Para mergear tu trabajo a main:
-# 1. Push tu rama
-# 2. Crear Pull Request en GitHub
-# 3. Aaron o tu mismo lo mergeas (no hay code review, es hackathon)
-# 4. Los demas hacen: git pull origin main
+# Para mergear: crear PR en GitHub → merge rápido
 
 # NUNCA hacer push directo a main
-# NUNCA resolver conflictos eliminando codigo de otro
 ```
 
-## MERGE SCHEDULE (cuando mergear)
+## MERGE SCHEDULE
 
 ```
-Hora 3:  Primer merge de TODOS a main (Aaron coordina)
+Hora 3:  Primer merge de TODOS (Aaron coordina)
 Hora 6:  Segundo merge — todo debe compilar
-Hora 10: Tercer merge — MVP debe funcionar
+Hora 10: Tercer merge — MVP funcional
 Hora 14: Cuarto merge — features completos
 Hora 18: ULTIMO merge — feature freeze
-Hora 22: Code freeze total. Solo hotfixes.
+Hora 22: Code freeze. Solo hotfixes.
 ```
 
 ---
 
 ## SI ALGO FALLA — PLAN B
 
-| Problema | Solucion inmediata |
-|----------|-------------------|
-| Azure Speech no funciona | Web Speech API ya esta como fallback en speech.ts |
-| Gemini API no responde | Cambiar modelo a 'gemini-1.5-flash' en gemini.ts |
-| MongoDB no conecta | Verificar IP whitelist en Atlas (0.0.0.0/0 para hackathon) |
-| ElevenLabs no genera audio | El egreso usa SpeechSynthesis del browser como fallback |
-| El seed falla | Verificar MONGODB_URI en .env.local, verificar conexion |
-| Next.js no compila | npm run dev -- --turbo (usa turbopack, mas rapido) |
-| Vercel no deploya | Deploy local: npm run build && npm start |
+| Problema | Solucion |
+|----------|----------|
+| Firebase no conecta | Verificar service account JSON, verificar Firestore en test mode |
+| "Missing index" en Firestore | Click en el link del error → crea el índice automáticamente |
+| Azure Speech no funciona | Web Speech API ya está como fallback (solo Chrome) |
+| Gemini API no responde | Cambiar a `gemini-1.5-flash` en gemini.ts |
+| ElevenLabs no genera audio | Fallback a SpeechSynthesis del browser (ya integrado) |
+| El seed falla | Verificar .env.local, verificar que Firestore este habilitado |
+| Next.js no compila | `npm run dev -- --turbo` |
+| Vercel no deploya | Deploy local: `npm run build && npm start` |
 
 ---
 
-## PRIORIDAD HORA 1 (LO MAS IMPORTANTE)
+## PRIORIDAD HORA 1
 
 ```
-Aaron:  MongoDB Atlas conectado + /api/patients retorna datos     = 30 min
-Max:    Azure Speech transcribiendo en español O Web Speech API   = 30 min
-Luis:   Seed ejecutado, 10 pacientes en la DB                     = 15 min
-Cris:   Dashboard mostrando pacientes reales de la DB             = 30 min
-Uri:    VoiceRecorder grabando y mostrando texto                  = 30 min
+Aaron:  Firebase conectado + /api/patients retorna datos          = 20 min
+Luis:   Seed ejecutado, 10 pacientes en Firestore                 = 10 min
+Max:    Azure Speech o Web Speech API transcribiendo en español    = 30 min
+Cris:   Dashboard mostrando pacientes reales                      = 30 min
+Uri:    VoiceRecorder grabando y mostrando texto                   = 30 min
 ```
 
-Si alguno de estos NO funciona en la hora 1:
-**PEDIR AYUDA AL EQUIPO INMEDIATAMENTE. No perder 2 horas solo.**
+**Firebase es MÁS RÁPIDO de configurar que MongoDB Atlas.** Aaron debería tener la DB lista en 15-20 minutos vs 30-40 con Atlas.
+
+Si alguno NO funciona en la hora 1: **PEDIR AYUDA INMEDIATAMENTE.**
 
 ---
 

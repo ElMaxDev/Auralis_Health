@@ -1,61 +1,45 @@
 // ============================================
 // RAG ENGINE — DUEÑO: Max (P2)
-// Busca contexto relevante en MongoDB para enriquecer prompts
+// Busca contexto relevante en Firestore para enriquecer prompts
+// Adaptado de MongoDB a Firebase Firestore
 // ============================================
-import { getCollections } from './mongodb';
+import { collections, queryToArray } from './firebase';
 
 // ============================================
-// OPCION 1: Embedding con Gemini + Vector Search
-// (Requiere que MongoDB Atlas tenga un vector index creado)
+// BUSQUEDA DE CONOCIMIENTO MÉDICO
+// Firestore no tiene vector search nativo, así que usamos
+// búsqueda por tipo + keywords en memoria
 // ============================================
-export async function generateEmbedding(text: string): Promise<number[]> {
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/text-embedding-004:embedContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'models/text-embedding-004',
-          content: { parts: [{ text }] },
-        }),
-      }
-    );
 
-    if (!response.ok) {
-      throw new Error(`Embedding API error: ${response.status}`);
+async function searchKnowledge(query: string, limit: number = 3) {
+  // Obtener todos los documentos de conocimiento (son pocos, ~10-20)
+  const snapshot = await collections.medicalKnowledge().get();
+  const allDocs = queryToArray<{ type: string; title: string; content: string }>(snapshot);
+
+  // Ranking simple por coincidencia de keywords
+  const keywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+
+  const scored = allDocs.map(doc => {
+    const contentLower = doc.content.toLowerCase();
+    const titleLower = doc.title.toLowerCase();
+    let score = 0;
+
+    for (const keyword of keywords) {
+      // Contar ocurrencias en contenido
+      const contentMatches = (contentLower.match(new RegExp(keyword, 'g')) || []).length;
+      score += contentMatches * 2;
+      // Bonus por match en título
+      if (titleLower.includes(keyword)) score += 5;
     }
 
-    const data = await response.json();
-    return data.embedding.values;
-  } catch (error) {
-    console.warn('⚠️ Error generando embedding, usando búsqueda por texto:', error);
-    return [];
-  }
-}
+    return { ...doc, score };
+  });
 
-
-// ============================================
-// OPCION 2: Búsqueda por texto simple (FALLBACK)
-// Funciona sin vector index — para cuando no hay tiempo de configurar Atlas Search
-// ============================================
-async function textSearch(collection: string, query: string, limit: number = 3) {
-  const { medicalKnowledge } = await getCollections();
-
-  // Buscar por coincidencia de texto simple
-  const keywords = query.toLowerCase().split(' ').filter(w => w.length > 3);
-
-  const results = await medicalKnowledge
-    .find({
-      type: collection,
-      $or: keywords.map(keyword => ({
-        content: { $regex: keyword, $options: 'i' },
-      })),
-    })
-    .limit(limit)
-    .toArray();
-
-  return results;
+  // Retornar los más relevantes
+  return scored
+    .filter(d => d.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }
 
 
@@ -64,49 +48,26 @@ async function textSearch(collection: string, query: string, limit: number = 3) 
 // ============================================
 export async function getPatientContext(patientId: string, query: string): Promise<string> {
   try {
-    const { patients, notes, medicalKnowledge } = await getCollections();
-
     // 1. Datos del paciente
-    const patient = await patients.findOne({ _id: patientId });
-    if (!patient) return 'Paciente no encontrado en la base de datos.';
+    const patientDoc = await collections.patients().doc(patientId).get();
+    if (!patientDoc.exists) return 'Paciente no encontrado en la base de datos.';
+    const patient = patientDoc.data()!;
 
     // 2. Últimas notas del paciente
-    const previousNotes = await notes
-      .find({ patientId })
-      .sort({ createdAt: -1 })
+    const notesSnapshot = await collections.notes()
+      .where('patientId', '==', patientId)
+      .orderBy('createdAt', 'desc')
       .limit(2)
-      .toArray();
+      .get();
+
+    const previousNotes = queryToArray<{
+      createdAt: string;
+      assessment?: { primary_diagnosis?: string };
+      plan?: { follow_up?: string };
+    }>(notesSnapshot);
 
     // 3. Buscar conocimiento médico relevante
-    let relevantDocs: Array<{ content: string }> = [];
-
-    // Intentar vector search primero
-    const embedding = await generateEmbedding(query);
-    if (embedding.length > 0) {
-      try {
-        relevantDocs = await medicalKnowledge
-          .aggregate([
-            {
-              $vectorSearch: {
-                index: 'medical_vector_index',
-                path: 'embedding',
-                queryVector: embedding,
-                numCandidates: 50,
-                limit: 3,
-              },
-            },
-            { $project: { content: 1, type: 1 } },
-          ])
-          .toArray() as Array<{ content: string }>;
-      } catch {
-        console.warn('Vector search no disponible, usando text search');
-      }
-    }
-
-    // Fallback a text search
-    if (relevantDocs.length === 0) {
-      relevantDocs = await textSearch('protocol', query) as Array<{ content: string }>;
-    }
+    const relevantDocs = await searchKnowledge(query);
 
     // 4. Construir contexto completo
     const context = `
@@ -127,7 +88,10 @@ ${previousNotes.length > 0
 }
 
 PROTOCOLOS/CONOCIMIENTO RELEVANTE:
-${relevantDocs.map(d => d.content).join('\n---\n') || 'No se encontraron protocolos específicos.'}
+${relevantDocs.length > 0
+  ? relevantDocs.map(d => d.content).join('\n---\n')
+  : 'No se encontraron protocolos específicos.'
+}
     `.trim();
 
     return context;

@@ -3,18 +3,20 @@
 // GET /api/alerts → Lista alertas activas
 // ============================================
 import { NextResponse } from 'next/server';
-import { getCollections } from '@/lib/mongodb';
+import { collections, queryToArray } from '@/lib/firebase';
+import type { Alert } from '@/types';
 
 export async function GET() {
   try {
-    const { alerts } = await getCollections();
-    const activeAlerts = await alerts
-      .find({ acknowledged: false })
-      .sort({ createdAt: -1 })
+    const snapshot = await collections.alerts()
+      .where('acknowledged', '==', false)
+      .orderBy('createdAt', 'desc')
       .limit(20)
-      .toArray();
+      .get();
 
-    return NextResponse.json({ success: true, data: activeAlerts });
+    const alerts = queryToArray<Alert>(snapshot);
+
+    return NextResponse.json({ success: true, data: alerts });
   } catch (error) {
     console.error('Error fetching alerts:', error);
     return NextResponse.json({ success: false, error: 'Error al obtener alertas' }, { status: 500 });

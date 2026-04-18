@@ -4,7 +4,7 @@
 // GET  /api/notes?patientId=X → Lista notas de un paciente
 // ============================================
 import { NextRequest, NextResponse } from 'next/server';
-import { getCollections } from '@/lib/mongodb';
+import { collections, docToObj, queryToArray } from '@/lib/firebase';
 import { transcriptionToSOAP } from '@/lib/gemini';
 import { getPatientContext } from '@/lib/rag';
 import type { SOAPNote } from '@/types';
@@ -21,11 +21,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { patients, notes, auditLog } = await getCollections();
-
     // 1. Obtener datos del paciente
-    const patient = await patients.findOne({ _id: patientId });
-    if (!patient) {
+    const patientDoc = await collections.patients().doc(patientId).get();
+    if (!patientDoc.exists) {
       return NextResponse.json(
         { success: false, error: 'Paciente no encontrado' },
         { status: 404 }
@@ -48,11 +46,11 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
-    // 5. Guardar en MongoDB
-    const result = await notes.insertOne(note);
+    // 5. Guardar en Firestore
+    const docRef = await collections.notes().add(note);
 
     // 6. Log de auditoría
-    await auditLog.insertOne({
+    await collections.auditLog().add({
       action: 'note_created',
       patientId,
       details: `Nota SOAP generada desde transcripción de voz. Dx: ${soapData.assessment?.primary_diagnosis}`,
@@ -61,7 +59,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { _id: result.insertedId, ...note },
+      data: { _id: docRef.id, ...note },
     });
   } catch (error) {
     console.error('Error creating note:', error);
@@ -76,15 +74,18 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const patientId = req.nextUrl.searchParams.get('patientId');
-    const { notes } = await getCollections();
 
-    const query = patientId ? { patientId } : {};
-    const allNotes = await notes
-      .find(query)
-      .sort({ createdAt: -1 })
-      .toArray();
+    let query: FirebaseFirestore.Query = collections.notes().orderBy('createdAt', 'desc');
+    if (patientId) {
+      query = collections.notes()
+        .where('patientId', '==', patientId)
+        .orderBy('createdAt', 'desc');
+    }
 
-    return NextResponse.json({ success: true, data: allNotes });
+    const snapshot = await query.get();
+    const notes = queryToArray<SOAPNote>(snapshot);
+
+    return NextResponse.json({ success: true, data: notes });
   } catch (error) {
     console.error('Error fetching notes:', error);
     return NextResponse.json(
