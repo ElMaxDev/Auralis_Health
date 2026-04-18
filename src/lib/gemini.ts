@@ -9,7 +9,7 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 
 // ============================================
@@ -77,13 +77,13 @@ const DOCUMENT_SCHEMAS: Record<string, string> = {
 // TODO: Conectar a RAG o DB para catálogo CIE-10 / CPT real.
 async function resolveClinicalCodes(diagnosisText: string | undefined): Promise<{ code: string; label: string }> {
   if (!diagnosisText) return { code: "Z00.0", label: "No especificado" };
-  
+
   const text = diagnosisText.toLowerCase();
   if (text.includes('apendicitis')) return { code: "K35.8", label: "Apendicitis aguda" };
   if (text.includes('colecistitis')) return { code: "K81.9", label: "Colecistitis, no especificada" };
   if (text.includes('hipertension') || text.includes('hta')) return { code: "I10.X", label: "Hipertensión esencial" };
   if (text.includes('diabetes')) return { code: "E11.9", label: "Diabetes mellitus tipo 2" };
-  
+
   return { code: "R69", label: "Causas de morbilidad desconocidas y no especificadas" }; // Fallback genérico
 }
 
@@ -91,7 +91,7 @@ async function resolveClinicalCodes(diagnosisText: string | undefined): Promise<
 // 1. GENERACIÓN DE DOCUMENTOS (Motor Dinámico)
 // ============================================
 export async function generateStructuredClinicalNote(
-  transcription: string, 
+  transcription: string,
   patientContext: string,
   documentType: 'SOAP' | 'POST_OP' | 'CIRCULATING_NURSE',
   authorRole: string,
@@ -117,10 +117,55 @@ TRANSCRIPCIÓN DICTADA (Rol: ${authorRole}):
 RESPONDE EN ESTE FORMATO JSON EXACTO (sin \`\`\`json, solo el JSON puro):
 ${targetSchema}`;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text = '';
+  try {
+    // LLAMADA A OLLAMA (MODELO LOCAL)
+    const response = await fetch('http://localhost:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama3', // El modelo local que usaremos
+        prompt: prompt,
+        stream: false,
+        format: 'json' // Obliga a Llama3 a responder en JSON válido
+      })
+    });
 
-  // Limpiar markdown si Gemini lo envuelve
+    if (!response.ok) {
+      throw new Error(`Ollama Error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    text = result.response;
+    
+  } catch (error: any) {
+    console.error('Ollama API Error:', error);
+    console.warn('⚠️ ERROR DE CONEXIÓN CON OLLAMA. USANDO DATOS SIMULADOS.');
+    // Fallback si Ollama no está corriendo o no tiene el modelo
+    text = JSON.stringify({
+      subjective: {
+        chief_complaint: transcription.substring(0, 50) + '...',
+        history_present_illness: "Generado automáticamente por sistema de respaldo debido a error en IA Local.",
+        review_of_systems: "No referido",
+        allergies_mentioned: "No referidas"
+      },
+      objective: {
+        vital_signs_mentioned: "No referidos",
+        physical_exam: "Pendiente de explorar"
+      },
+      assessment: {
+        primary_diagnosis_natural_language: "Diagnóstico en evaluación (Modo Offline)",
+        secondary_diagnoses_natural_language: [],
+        clinical_reasoning: "El sistema de IA local (Ollama) no está respondiendo."
+      },
+      plan: {
+        medications: [],
+        follow_up: "Verificar conexión de Ollama en localhost:11434"
+      }
+    });
+  }
+
+  // Limpiar markdown si Llama3 lo envuelve por accidente
   const cleaned = text
     .replace(/```json\s*/g, '')
     .replace(/```\s*/g, '')
@@ -130,18 +175,18 @@ ${targetSchema}`;
   try {
     extractedData = JSON.parse(cleaned);
   } catch (error) {
-    console.error('Error parsing Gemini response:', cleaned);
-    throw new Error('La IA no devolvió un JSON válido.');
+    console.error('Error parsing Ollama response:', cleaned);
+    throw new Error('La IA Local no devolvió un JSON válido.');
   }
 
   // --- PIPELINE DE RESOLUCIÓN DE CÓDIGOS (Anti-Alucinaciones) ---
   let resolved_codes = {};
   if (documentType === 'SOAP' && extractedData.assessment?.primary_diagnosis_natural_language) {
-      const codeData = await resolveClinicalCodes(extractedData.assessment.primary_diagnosis_natural_language);
-      resolved_codes = { primary_diagnosis_code: codeData.code, primary_diagnosis_label: codeData.label };
+    const codeData = await resolveClinicalCodes(extractedData.assessment.primary_diagnosis_natural_language);
+    resolved_codes = { primary_diagnosis_code: codeData.code, primary_diagnosis_label: codeData.label };
   } else if (documentType === 'POST_OP' && extractedData.procedure_details?.post_op_diagnosis_natural_language) {
-      const codeData = await resolveClinicalCodes(extractedData.procedure_details.post_op_diagnosis_natural_language);
-      resolved_codes = { post_op_diagnosis_code: codeData.code, post_op_diagnosis_label: codeData.label };
+    const codeData = await resolveClinicalCodes(extractedData.procedure_details.post_op_diagnosis_natural_language);
+    resolved_codes = { post_op_diagnosis_code: codeData.code, post_op_diagnosis_label: codeData.label };
   }
 
   // --- TRAZABILIDAD (Cumplimiento NOM-024) ---

@@ -2,7 +2,7 @@
 // RAG ENGINE — DUEÑO: Max (P2)
 // Busca contexto relevante en MongoDB para enriquecer prompts
 // ============================================
-import { getCollections } from './mongodb';
+import { collections, queryToArray } from './firebase';
 
 // ============================================
 // OPCION 1: Embedding con Gemini + Vector Search
@@ -40,20 +40,15 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 // Funciona sin vector index — para cuando no hay tiempo de configurar Atlas Search
 // ============================================
 async function textSearch(collection: string, query: string, limit: number = 3) {
-  const { medicalKnowledge } = await getCollections();
-
-  // Buscar por coincidencia de texto simple
+  // Buscar por coincidencia de texto simple en memoria para Firebase
   const keywords = query.toLowerCase().split(' ').filter(w => w.length > 3);
-
-  const results = await medicalKnowledge
-    .find({
-      type: collection,
-      $or: keywords.map(keyword => ({
-        content: { $regex: keyword, $options: 'i' },
-      })),
-    })
-    .limit(limit)
-    .toArray();
+  
+  const snapshot = await collections.medicalKnowledge().where('type', '==', collection).get();
+  const allDocs = queryToArray<any>(snapshot);
+  
+  const results = allDocs.filter(doc => 
+    keywords.some(k => doc.content?.toLowerCase().includes(k))
+  ).slice(0, limit);
 
   return results;
 }
@@ -64,46 +59,23 @@ async function textSearch(collection: string, query: string, limit: number = 3) 
 // ============================================
 export async function getPatientContext(patientId: string, query: string): Promise<string> {
   try {
-    const { patients, notes, medicalKnowledge } = await getCollections();
-
     // 1. Datos del paciente
-    const patient = await patients.findOne({ _id: patientId });
-    if (!patient) return 'Paciente no encontrado en la base de datos.';
+    const patientDoc = await collections.patients().doc(patientId).get();
+    if (!patientDoc.exists) return 'Paciente no encontrado en la base de datos.';
+    const patient = patientDoc.data() as any;
 
     // 2. Últimas notas del paciente
-    const previousNotes = await notes
-      .find({ patientId })
-      .sort({ createdAt: -1 })
+    const notesSnapshot = await collections.notes()
+      .where('patientId', '==', patientId)
+      .orderBy('createdAt', 'desc')
       .limit(2)
-      .toArray();
+      .get();
+    const previousNotes = queryToArray<any>(notesSnapshot);
 
     // 3. Buscar conocimiento médico relevante
     let relevantDocs: Array<{ content: string }> = [];
 
-    // Intentar vector search primero
-    const embedding = await generateEmbedding(query);
-    if (embedding.length > 0) {
-      try {
-        relevantDocs = await medicalKnowledge
-          .aggregate([
-            {
-              $vectorSearch: {
-                index: 'medical_vector_index',
-                path: 'embedding',
-                queryVector: embedding,
-                numCandidates: 50,
-                limit: 3,
-              },
-            },
-            { $project: { content: 1, type: 1 } },
-          ])
-          .toArray() as Array<{ content: string }>;
-      } catch {
-        console.warn('Vector search no disponible, usando text search');
-      }
-    }
-
-    // Fallback a text search
+    // Fallback a text search en Firebase
     if (relevantDocs.length === 0) {
       relevantDocs = await textSearch('protocol', query) as Array<{ content: string }>;
     }
@@ -120,9 +92,17 @@ ASEGURADORA: ${patient.insuranceProvider || 'No especificada'}
 
 NOTAS PREVIAS:
 ${previousNotes.length > 0
-  ? previousNotes.map(n =>
-      `[${n.createdAt}] Dx: ${n.assessment?.primary_diagnosis || 'N/A'} | Plan: ${n.plan?.follow_up || 'N/A'}`
-    ).join('\n')
+  ? previousNotes.map(n => {
+      const type = n.audit_metadata?.document_type || 'SOAP';
+      const dx = n.clinical_codes_resolved?.primary_diagnosis_label 
+                 || n.document_content?.assessment?.primary_diagnosis_natural_language 
+                 || n.document_content?.procedure_details?.post_op_diagnosis_natural_language 
+                 || 'No especificado';
+      const plan = n.document_content?.plan?.follow_up 
+                   || n.document_content?.plan?.instructions 
+                   || 'No especificado';
+      return `[${n.createdAt || n.audit_metadata?.created_at_iso}] Tipo: ${type} | Dx: ${dx} | Plan: ${plan}`;
+    }).join('\n')
   : 'Primera consulta - sin notas previas'
 }
 

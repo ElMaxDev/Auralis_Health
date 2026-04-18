@@ -46,7 +46,7 @@ export default function SOAPNoteEditor({ note, isLoading, onSign }: SOAPNoteEdit
             ...(objective.vital_signs as Record<string, string> || {}),
             [field]: value,
           },
-        } as any,
+        },
       };
     });
   };

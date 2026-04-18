@@ -3,7 +3,7 @@
 // POST /api/insurance → Simula envío a aseguradora
 // ============================================
 import { NextRequest, NextResponse } from 'next/server';
-import { getCollections } from '@/lib/mongodb';
+import { collections } from '@/lib/firebase';
 import type { InsuranceSubmission } from '@/types';
 
 export async function POST(req: NextRequest) {
@@ -17,12 +17,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { patients, auditLog } = await getCollections();
-
-    const patient = await patients.findOne({ _id: patientId });
-    if (!patient) {
+    const patientDoc = await collections.patients().doc(patientId).get();
+    if (!patientDoc.exists) {
       return NextResponse.json({ success: false, error: 'Paciente no encontrado' }, { status: 404 });
     }
+    const patient = patientDoc.data()!;
 
     // Simular delay de envío (2 segundos)
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -40,7 +39,7 @@ export async function POST(req: NextRequest) {
     };
 
     // Guardar en audit log
-    await auditLog.insertOne({
+    await collections.auditLog().add({
       action: 'insurance_submitted',
       patientId,
       details: `Documentos enviados a ${provider}. Folio: ${claimId}`,

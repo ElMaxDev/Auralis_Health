@@ -15,10 +15,11 @@ export async function POST(req: NextRequest) {
 
     const audioBuffer = await generateVoiceAudio(text);
 
-    return new NextResponse(audioBuffer as any, {
+    const uint8 = new Uint8Array(audioBuffer);
+    return new NextResponse(uint8, {
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Content-Length': audioBuffer.length.toString(),
+        'Content-Length': uint8.byteLength.toString(),
       },
     });
   } catch (error) {

@@ -33,7 +33,7 @@ function getFirebaseApp() {
   }
 
   console.warn(
-    'Firebase no configurado. Define FIREBASE_SERVICE_ACCOUNT o las variables individuales en .env.local. Bypass activo para compilación.'
+    'Firebase no configurado. Define FIREBASE_SERVICE_ACCOUNT o las variables individuales en .env.local. Bypass activo para pruebas.'
   );
   return null as any;
 }

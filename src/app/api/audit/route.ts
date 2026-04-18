@@ -1,24 +1,23 @@
 // ============================================
 // API: AUDIT — DUEÑO: Aarón (P1)
-// POST /api/audit → Registrar acción (+ opcional Solana)
+// POST /api/audit → Registrar acción
 // GET  /api/audit → Lista audit log
 // ============================================
 import { NextRequest, NextResponse } from 'next/server';
-import { getCollections } from '@/lib/mongodb';
+import { collections, queryToArray } from '@/lib/firebase';
 
 export async function POST(req: NextRequest) {
   try {
     const entry = await req.json();
-    const { auditLog } = await getCollections();
 
-    const result = await auditLog.insertOne({
+    const docRef = await collections.auditLog().add({
       ...entry,
       timestamp: new Date().toISOString(),
     });
 
     return NextResponse.json({
       success: true,
-      data: { _id: result.insertedId, ...entry },
+      data: { _id: docRef.id, ...entry },
     });
   } catch (error) {
     console.error('Error creating audit entry:', error);
@@ -28,8 +27,12 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   try {
-    const { auditLog } = await getCollections();
-    const entries = await auditLog.find().sort({ timestamp: -1 }).limit(50).toArray();
+    const snapshot = await collections.auditLog()
+      .orderBy('timestamp', 'desc')
+      .limit(50)
+      .get();
+
+    const entries = queryToArray(snapshot);
     return NextResponse.json({ success: true, data: entries });
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Error al obtener audit log' }, { status: 500 });
