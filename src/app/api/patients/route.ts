@@ -1,8 +1,19 @@
-// ============================================
-// API: PATIENTS — DUEÑO: Aarón (P1)
-// GET /api/patients → Lista todos los pacientes
-// ============================================
-import { NextResponse } from 'next/server';
+/**
+ * @file /api/patients/route.ts
+ * @description Endpoints REST para la gestion de pacientes en Firestore.
+ *
+ * GET  /api/patients
+ *   Lista todos los pacientes activos (status != 'discharged').
+ *   El ordenamiento se realiza en memoria para evitar la creacion
+ *   de indices compuestos en Firestore (primero por status, luego por triageLevel).
+ *
+ * POST /api/patients
+ *   Registra un nuevo paciente en la coleccion "patients" de Firestore.
+ *   Campos obligatorios: name, age, gender, bed.
+ *   El medico responsable se asigna desde el campo attendingDoctor del body.
+ *   Se genera un registro de auditoria automaticamente.
+ */
+import { NextRequest, NextResponse } from 'next/server';
 import { collections, queryToArray } from '@/lib/firebase';
 import type { Patient } from '@/types';
 
@@ -29,6 +40,64 @@ export async function GET() {
     console.error('Error fetching patients:', error);
     return NextResponse.json(
       { success: false, error: 'Error al obtener pacientes' },
+      { status: 500 }
+    );
+  }
+}
+
+  // POST: Registro de un nuevo paciente en Firestore
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { name, age, gender, bed, admissionReason, medicalHistory, allergies, currentMedications, attendingDoctor, insuranceProvider } = body;
+
+    if (!name || !age || !gender || !bed) {
+      return NextResponse.json(
+        { success: false, error: 'name, age, gender y bed son requeridos' },
+        { status: 400 }
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    const newPatient: Omit<Patient, '_id'> = {
+      name,
+      age: Number(age),
+      gender,
+      bed,
+      status: 'stable',
+      triageLevel: 3,
+      medicalHistory: medicalHistory || '',
+      currentMedications: currentMedications || [],
+      allergies: allergies || [],
+      insuranceProvider: insuranceProvider || 'Ninguno',
+      insurancePolicyNumber: '',
+      admissionDate: now,
+      admissionReason: admissionReason || '',
+      attendingDoctor: attendingDoctor || '',
+      previousNotes: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const result = await collections.patients().add(newPatient);
+
+    // Log de auditoría
+    await collections.auditLog().add({
+      action: 'note_created',
+      patientId: result.id,
+      details: `Paciente ${name} dado de alta en cama ${bed}.`,
+      timestamp: now,
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: { _id: result.id, ...newPatient },
+    });
+  } catch (error) {
+    console.error('Error creating patient:', error);
+    return NextResponse.json(
+      { success: false, error: 'Error al registrar paciente' },
       { status: 500 }
     );
   }

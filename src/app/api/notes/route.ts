@@ -1,8 +1,22 @@
-// ============================================
-// API: NOTES — DUEÑO: Aarón (P1)
-// POST /api/notes → Recibe transcripción, genera nota SOAP con Gemini
-// GET  /api/notes?patientId=X → Lista notas de un paciente
-// ============================================
+/**
+ * @file /api/notes/route.ts
+ * @description Endpoints REST para la gestion de notas clinicas en Firestore.
+ *
+ * POST /api/notes
+ *   Recibe una transcripcion de voz y genera una nota clinica estructurada
+ *   (formato SOAP por defecto) utilizando el motor de IA configurado
+ *   (Ollama local o Gemini como fallback). El documento generado incluye
+ *   codigos clinicos resueltos y metadatos de auditoria.
+ *
+ * GET /api/notes?patientId=X
+ *   Lista las notas clinicas de un paciente especifico, ordenadas por fecha
+ *   de creacion descendente. Si no se proporciona patientId, devuelve todas.
+ *
+ * Dependencias:
+ *   - @/lib/gemini (generateStructuredClinicalNote)
+ *   - @/lib/rag (getPatientContext)
+ *   - Firestore: colecciones "notes", "patients", "auditLog"
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { collections, queryToArray } from '@/lib/firebase';
 import { generateStructuredClinicalNote } from '@/lib/gemini';
