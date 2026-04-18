@@ -27,39 +27,37 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
 
-  // Cargar pacientes desde la API, con datos simulados como fallback
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const [patientsRes, alertsRes] = await Promise.all([
-          fetch('/api/patients'),
-          fetch('/api/alerts'),
-        ]);
-        const patientsData = await patientsRes.json();
+  // Cargar pacientes desde la API
+  async function fetchData() {
+    try {
+      const [patientsRes, alertsRes] = await Promise.all([
+        fetch('/api/patients', { cache: 'no-store' }),
+        fetch('/api/alerts', { cache: 'no-store' }),
+      ]);
+
+      if (!patientsRes.ok) throw new Error(`patients ${patientsRes.status}`);
+      const patientsData = await patientsRes.json();
+      setPatients(patientsData.success ? patientsData.data : []);
+
+      if (alertsRes.ok) {
         const alertsData = await alertsRes.json();
-
-        const realPatients = patientsData.success ? patientsData.data : [];
-
-        // Si no hay pacientes reales, usar datos simulados para demostracion
-        if (realPatients.length === 0) {
-          setPatients(MOCK_PATIENTS);
-        } else {
-          setPatients(realPatients);
-        }
-
         if (alertsData.success) setAlerts(alertsData.data);
-      } catch (error) {
-        console.error('Error loading dashboard:', error);
-        // En caso de error de red, usar datos simulados
-        setPatients(MOCK_PATIENTS);
-      } finally {
-        setLoading(false);
       }
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
+      // En caso de error crítico de red, intentar cargar los simulados importados
+      setPatients(MOCK_PATIENTS.filter(p => p.status !== 'discharged'));
+    } finally {
+      setLoading(false);
     }
+  }
 
+  useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
+  // fetchData es estable — definida fuera del efecto, no necesita deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Filtrar pacientes
@@ -82,6 +80,12 @@ export default function Dashboard() {
 
   const handleDismissAlert = (alertId: string) => {
     setAlerts(prev => prev.filter(a => a._id !== alertId));
+    // Sincronizar con Firestore para que no reaparezca en el próximo polling
+    fetch('/api/alerts', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alertId }),
+    }).catch(err => console.error('Error acknowledging alert:', err));
   };
 
   if (loading) {
@@ -161,11 +165,10 @@ export default function Dashboard() {
       {showNewPatientForm && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-md px-4 py-6 overflow-y-auto">
           <div className="w-full max-w-2xl my-auto">
-            <NewPatientForm 
-              onPatientCreated={(id) => {
+            <NewPatientForm
+              onPatientCreated={(_id) => {
                 setShowNewPatientForm(false);
-                // Opcional: refrescar lista o redirigir
-                window.location.reload(); 
+                fetchData();
               }}
               onCancel={() => setShowNewPatientForm(false)}
             />

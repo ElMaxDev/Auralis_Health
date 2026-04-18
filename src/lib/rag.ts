@@ -73,12 +73,7 @@ export async function getPatientContext(patientId: string, query: string): Promi
     const previousNotes = queryToArray<any>(notesSnapshot);
 
     // 3. Buscar conocimiento médico relevante
-    let relevantDocs: Array<{ content: string }> = [];
-
-    // Fallback a text search en Firebase
-    if (relevantDocs.length === 0) {
-      relevantDocs = await textSearch('protocol', query) as Array<{ content: string }>;
-    }
+    const relevantDocs = await textSearch('protocol', query) as Array<{ content: string }>;
 
     // 4. Construir contexto completo
     const context = `

@@ -53,13 +53,13 @@ async function getEncryptionKey(password: string, salt: Uint8Array): Promise<Cry
   return window.crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt: salt,
+      salt: salt as any,
       iterations: 100000,
       hash: "SHA-256",
     },
     keyMaterial,
     { name: "AES-GCM", length: 256 },
-    true,
+    false,
     ["encrypt", "decrypt"]
   );
 }
@@ -119,9 +119,9 @@ export async function encryptData(
   const encodedData = enc.encode(plaintext);
 
   const encryptedBuffer = await window.crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: iv },
+    { name: "AES-GCM", iv: iv as any },
     key,
-    encodedData
+    encodedData as any
   );
 
   return {
@@ -158,9 +158,9 @@ export async function decryptData(
     const key = await getEncryptionKey(password, salt);
 
     const decryptedBuffer = await window.crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: iv },
+      { name: "AES-GCM", iv: iv as any },
       key,
-      ciphertext
+      ciphertext as any
     );
 
     const dec = new TextDecoder();

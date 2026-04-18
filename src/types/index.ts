@@ -10,6 +10,9 @@ export interface Patient {
   name: string;
   age: number;
   gender: 'M' | 'F';
+  curp?: string;
+  rfc?: string;
+  dob?: string;
   bed: string;
   status: 'stable' | 'warning' | 'critical' | 'discharged';
   triageLevel: 1 | 2 | 3 | 4 | 5;
@@ -48,7 +51,7 @@ export interface ClinicalDocument {
   patientId: string;
   doctorName: string;
   rawTranscription: string;
-  status: 'draft' | 'signed';
+  status: 'draft' | 'signed' | 'signed_e2ee';
   
   // Nueva estructura dinámica
   document_content: any;
@@ -146,7 +149,7 @@ export interface InsuranceSubmission {
 // ---- AUDIT LOG ----
 export interface AuditEntry {
   _id?: string;
-  action: 'note_created' | 'note_signed' | 'discharge_initiated' | 'insurance_submitted' | 'alert_generated';
+  action: 'note_created' | 'note_signed' | 'note_signed_e2ee' | 'discharge_initiated' | 'insurance_submitted' | 'alert_generated';
   patientId: string;
   details: string;
   solanaTxHash?: string;

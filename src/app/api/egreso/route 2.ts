@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
     const notesSnapshot = await collections.notes()
       .where('patientId', '==', patientId)
-      .where('status', 'in', ['signed', 'signed_e2ee'])
+      .where('status', '==', 'signed')
       .get();
 
     const checklist: DischargeChecklist = {
@@ -58,10 +58,12 @@ export async function POST(req: NextRequest) {
     }
     const patient = { _id: patientDoc.id, ...patientDoc.data() };
 
-    // Obtener última nota firmada (ordenado en memoria para evitar error de índice compuesto)
+    // Obtener última nota firmada
     const notesSnapshot = await collections.notes()
       .where('patientId', '==', patientId)
-      .where('status', 'in', ['signed', 'signed_e2ee'])
+      .where('status', '==', 'signed')
+      .orderBy('createdAt', 'desc')
+      .limit(1)
       .get();
 
     if (notesSnapshot.empty) {
@@ -71,10 +73,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const notes = queryToArray(notesSnapshot) as Array<{ _id: string, createdAt: string, [key: string]: any }>;
-    notes.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
-    const latestNote = notes[0];
+    const latestNote = { _id: notesSnapshot.docs[0].id, ...notesSnapshot.docs[0].data() };
 
     // Generar documentos con Gemini
     const documents = await generateDischargeDocuments(patient, latestNote);

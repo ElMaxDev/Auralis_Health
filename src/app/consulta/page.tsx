@@ -115,6 +115,19 @@ function ConsultaContent() {
     });
   };
 
+  const updateTopLevelField = (field: string, value: string) => {
+    setClinicalNote(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        document_content: {
+          ...prev.document_content,
+          [field]: value
+        }
+      };
+    });
+  };
+
   const handleSignNote = () => {
     // En lugar de guardar directo, abrimos el modal de cifrado
     setShowEncryptModal(true);
@@ -159,15 +172,14 @@ function ConsultaContent() {
 
       if (data.success) {
         alert('✅ Nota cifrada y guardada en Firestore. El texto plano ha sido eliminado del servidor.');
+        router.push('/');
       } else {
-        alert('⚠️ Nota cifrada localmente, pero no se pudo actualizar en el servidor: ' + (data.error || 'Error desconocido'));
+        alert('⚠️ No se pudo guardar en el servidor: ' + (data.error || 'Error desconocido') + '\nLa nota sigue abierta para que puedas reintentar.');
       }
     } catch (error) {
       console.error('Error saving encrypted note:', error);
-      alert('⚠️ Nota cifrada localmente. Se guardará la próxima vez que haya conexión.');
+      alert('⚠️ Error de conexión. La nota sigue abierta, intenta guardar de nuevo.');
     }
-
-    router.push('/');
   };
 
   if (loading) return <div className="p-8 text-center text-primary-500 animate-pulse">Cargando paciente...</div>;
@@ -253,7 +265,7 @@ function ConsultaContent() {
           </div>
           
           <div className="space-y-5">
-            {clinicalNote.audit_metadata?.document_type === 'SOAP' ? (
+            {clinicalNote.audit_metadata?.document_type === 'SOAP' && (
               <>
                 <div>
                   <h4 className="text-sm font-bold text-white/70 uppercase mb-2 flex items-center gap-2">
@@ -347,15 +359,248 @@ function ConsultaContent() {
                   </div>
                 </div>
               </>
-            ) : (
-              <div className="text-sm text-white/80 bg-black/20 p-4 rounded-xl border border-white/5">
-                <p className="font-bold text-white mb-2">Contenido Dinámico Extraído ({clinicalNote.audit_metadata?.document_type}):</p>
-                <pre className="whitespace-pre-wrap font-sans text-xs">
-                  {JSON.stringify(clinicalNote.document_content, null, 2)}
-                </pre>
+            )}
+
+            {clinicalNote.audit_metadata?.document_type === 'EVOLUTION' && (
+              <div className="space-y-4 text-sm text-white/80 bg-black/20 p-4 rounded-xl border border-white/5">
+                <div>
+                  <strong className="text-white/90 block mb-1">Motivo de consulta:</strong>
+                  <textarea 
+                    className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30 resize-y min-h-[60px]"
+                    value={clinicalNote.document_content?.consultationReason || ''}
+                    onChange={(e) => updateTopLevelField('consultationReason', e.target.value)}
+                  />
+                </div>
+                
+                <div className="pt-2 border-t border-white/5">
+                  <strong className="text-white/90 block mb-2">Signos Vitales:</strong>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-white/50 mb-1 block">Tensión Arterial</span>
+                      <input type="text"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30"
+                        value={clinicalNote.document_content?.vitals?.bloodPressure || ''}
+                        onChange={(e) => {
+                          setClinicalNote(prev => prev ? {
+                            ...prev, document_content: {
+                              ...prev.document_content, vitals: { ...(prev.document_content.vitals || {}), bloodPressure: e.target.value }
+                            }
+                          } : prev);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-white/50 mb-1 block">Frecuencia Cardiaca</span>
+                      <input type="text"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30"
+                        value={clinicalNote.document_content?.vitals?.heartRate || ''}
+                        onChange={(e) => {
+                          setClinicalNote(prev => prev ? {
+                            ...prev, document_content: {
+                              ...prev.document_content, vitals: { ...(prev.document_content.vitals || {}), heartRate: e.target.value }
+                            }
+                          } : prev);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-white/50 mb-1 block">Frec. Respiratoria</span>
+                      <input type="text"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30"
+                        value={clinicalNote.document_content?.vitals?.respiratoryRate || ''}
+                        onChange={(e) => {
+                          setClinicalNote(prev => prev ? {
+                            ...prev, document_content: {
+                              ...prev.document_content, vitals: { ...(prev.document_content.vitals || {}), respiratoryRate: e.target.value }
+                            }
+                          } : prev);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-white/50 mb-1 block">Temperatura</span>
+                      <input type="text"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30"
+                        value={clinicalNote.document_content?.vitals?.temperature || ''}
+                        onChange={(e) => {
+                          setClinicalNote(prev => prev ? {
+                            ...prev, document_content: {
+                              ...prev.document_content, vitals: { ...(prev.document_content.vitals || {}), temperature: e.target.value }
+                            }
+                          } : prev);
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-white/5">
+                  <strong className="text-white/90 block mb-1">Exploración física:</strong>
+                  <textarea 
+                    className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30 resize-y min-h-[80px]"
+                    value={clinicalNote.document_content?.physicalExam || ''}
+                    onChange={(e) => updateTopLevelField('physicalExam', e.target.value)}
+                  />
+                </div>
+                
+                <div>
+                  <strong className="text-white/90 block mb-1">Diagnósticos Actualizados:</strong>
+                  <textarea 
+                    className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30 resize-y min-h-[60px]"
+                    placeholder="Ingrese diagnósticos separados por saltos de línea"
+                    value={clinicalNote.document_content?.updatedDiagnoses?.join('\n') || ''}
+                    onChange={(e) => {
+                      const arr = e.target.value.split('\n');
+                      setClinicalNote(prev => prev ? { ...prev, document_content: { ...prev.document_content, updatedDiagnoses: arr } } : prev);
+                    }}
+                  />
+                </div>
+
+                <div className="pt-2 border-t border-white/5">
+                  <strong className="text-white/90 block mb-1">Evolución clínica:</strong>
+                  <textarea 
+                    className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30 resize-y min-h-[100px]"
+                    value={clinicalNote.document_content?.clinicalEvolution || ''}
+                    onChange={(e) => updateTopLevelField('clinicalEvolution', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <strong className="text-white/90 block mb-1">Tratamiento médico indicado:</strong>
+                  <textarea 
+                    className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30 resize-y min-h-[80px]"
+                    value={clinicalNote.document_content?.medicalTreatment || ''}
+                    onChange={(e) => updateTopLevelField('medicalTreatment', e.target.value)}
+                  />
+                </div>
               </div>
             )}
-            
+
+            {clinicalNote.audit_metadata?.document_type === 'POST_OP' && (
+              <div className="space-y-4 text-sm text-white/80 bg-black/20 p-4 rounded-xl border border-white/5">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <strong className="text-white/90 block mb-1">Inicio de cirugía:</strong>
+                    <input type="time"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30"
+                      value={clinicalNote.document_content?.surgeryStartTime || ''}
+                      onChange={(e) => updateTopLevelField('surgeryStartTime', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <strong className="text-white/90 block mb-1">Término de cirugía:</strong>
+                    <input type="time"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30"
+                      value={clinicalNote.document_content?.surgeryEndTime || ''}
+                      onChange={(e) => updateTopLevelField('surgeryEndTime', e.target.value)}
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3 pt-2">
+                  <strong className="text-white/90">¿Cirugía planeada?</strong>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" 
+                      checked={!!clinicalNote.document_content?.isPlannedSurgery}
+                      onChange={(e) => updateTopLevelField('isPlannedSurgery', e.target.checked as any)}
+                    />
+                    <div className="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
+                  </label>
+                </div>
+
+                <div className="pt-2 border-t border-white/5">
+                  <strong className="text-white/90 block mb-1">Diagnóstico Postoperatorio:</strong>
+                  <textarea 
+                    className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30 resize-y min-h-[60px]"
+                    value={clinicalNote.document_content?.diagnosis || ''}
+                    onChange={(e) => updateTopLevelField('diagnosis', e.target.value)}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <strong className="text-white/90 block mb-1">Técnicas Quirúrgicas:</strong>
+                    <textarea 
+                      className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30 resize-y min-h-[80px]"
+                      value={clinicalNote.document_content?.surgicalTechniques?.join('\n') || ''}
+                      onChange={(e) => {
+                        const arr = e.target.value.split('\n');
+                        setClinicalNote(prev => prev ? { ...prev, document_content: { ...prev.document_content, surgicalTechniques: arr } } : prev);
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <strong className="text-white/90 block mb-1">Hallazgos:</strong>
+                    <textarea 
+                      className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30 resize-y min-h-[80px]"
+                      value={clinicalNote.document_content?.findings?.join('\n') || ''}
+                      onChange={(e) => {
+                        const arr = e.target.value.split('\n');
+                        setClinicalNote(prev => prev ? { ...prev, document_content: { ...prev.document_content, findings: arr } } : prev);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-white/5">
+                  <strong className="text-white/90 block mb-1">Incidentes / Accidentes:</strong>
+                  <input type="text"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30"
+                    value={clinicalNote.document_content?.incidents || ''}
+                    onChange={(e) => updateTopLevelField('incidents', e.target.value)}
+                  />
+                </div>
+
+                <div className="pt-2 border-t border-white/5">
+                  <strong className="text-white/90 block mb-2">Equipo Quirúrgico:</strong>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-white/50 mb-1 block">Anestesiólogo</span>
+                      <input type="text"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30"
+                        value={clinicalNote.document_content?.anesthesiologist || ''}
+                        onChange={(e) => updateTopLevelField('anesthesiologist', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-white/50 mb-1 block">Instrumentista</span>
+                      <input type="text"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30"
+                        value={clinicalNote.document_content?.instrumentist || ''}
+                        onChange={(e) => updateTopLevelField('instrumentist', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-white/50 mb-1 block">Enfermera Circulante</span>
+                      <input type="text"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30"
+                        value={clinicalNote.document_content?.circulatingNurse || ''}
+                        onChange={(e) => updateTopLevelField('circulatingNurse', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {clinicalNote.audit_metadata?.document_type === 'NURSE_NOTE' && (
+              <div className="space-y-4 text-sm text-white/80 bg-black/20 p-4 rounded-xl border border-white/5">
+                <div>
+                  <strong className="text-white/90 block mb-1">Materiales, insumos y equipo:</strong>
+                  <textarea 
+                    className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 focus:outline-none focus:border-white/30 min-h-[150px] resize-y"
+                    placeholder="Ingrese un material por línea"
+                    value={clinicalNote.document_content?.materialsSuppliesAndEquipment?.join('\n') || ''}
+                    onChange={(e) => {
+                      const arr = e.target.value.split('\n');
+                      setClinicalNote(prev => {
+                        if (!prev) return prev;
+                        return { ...prev, document_content: { ...prev.document_content, materialsSuppliesAndEquipment: arr } };
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+            )}
             <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/10 flex justify-between items-center text-xs text-white/40">
                <div><strong className="text-white/60">ID Autor:</strong> {clinicalNote.audit_metadata?.author_id} ({clinicalNote.audit_metadata?.author_role})</div>
                <div><strong className="text-white/60">Firma IA:</strong> {clinicalNote.audit_metadata?.created_at_iso}</div>

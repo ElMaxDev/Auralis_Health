@@ -2,72 +2,73 @@
 // GEMINI AI — DUEÑO: Max (P2)
 // Motor de IA para: SOAP, documentos de egreso, chat
 // ============================================
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import type { DocumentType } from '@/types/medicalNotes';
 
-if (!process.env.GEMINI_API_KEY) {
-  console.warn('⚠️ GEMINI_API_KEY no configurada');
-}
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+// NOTA: Se ha migrado completamente a Ollama (Llama3 local).
+// Ya no se requiere la SDK de Google Generative AI ni la API key externa.
 
 
 // ============================================
 // DOCUMENT SCHEMAS (Inyección Dinámica)
 // ============================================
-const DOCUMENT_SCHEMAS: Record<string, string> = {
-  SOAP: `{
-    "subjective": {
-      "chief_complaint": "motivo principal de consulta",
-      "history_present_illness": "descripción detallada del padecimiento actual",
-      "review_of_systems": "síntomas por aparatos y sistemas",
-      "allergies_mentioned": "alergias mencionadas o 'No referidas'"
-    },
-    "objective": {
-      "vital_signs_mentioned": "signos vitales mencionados",
-      "physical_exam": "hallazgos de exploración física"
-    },
-    "assessment": {
-      "primary_diagnosis_natural_language": "diagnóstico principal en lenguaje natural (ej. Apendicitis aguda)",
-      "secondary_diagnoses_natural_language": ["otros diagnósticos mencionados"],
-      "clinical_reasoning": "razonamiento clínico breve"
-    },
-    "plan": {
-      "medications": [{ "name": "nombre", "dose": "dosis", "frequency": "frecuencia" }],
-      "follow_up": "plan de seguimiento"
-    }
-  }`,
+const DOCUMENT_SCHEMAS: Record<DocumentType, string> = {
   POST_OP: `{
-    "surgical_team": {
-      "surgeon_mentioned": "nombre del cirujano principal si se menciona",
-      "assistants_mentioned": ["asistentes mencionados"],
-      "anesthesiologist_mentioned": "anestesiólogo si se menciona"
-    },
-    "procedure_details": {
-      "pre_op_diagnosis_natural_language": "diagnóstico preoperatorio en lenguaje natural",
-      "post_op_diagnosis_natural_language": "diagnóstico postoperatorio en lenguaje natural",
-      "procedure_performed_natural_language": "nombre del procedimiento realizado",
-      "type_of_anesthesia": "tipo de anestesia"
-    },
-    "surgical_findings": "hallazgos quirúrgicos detallados",
-    "surgical_technique": "descripción de la técnica quirúrgica paso a paso",
-    "complications": "complicaciones o 'Ninguna'",
-    "estimated_blood_loss": "sangrado estimado o 'No reportado'",
-    "specimens_sent": ["muestras enviadas a patología"]
+    "patientFullName": "Nombre completo del paciente",
+    "age": "Edad (ej. 45)",
+    "sex": "Sexo",
+    "dob": "YYYY-MM-DD",
+    "curp": "CURP",
+    "rfc": "RFC",
+    "recordNumber": "Número de expediente",
+    "date": "YYYY-MM-DD",
+    "exactTime": "HH:MM",
+    "professionalIdSignature": "ID o Firma del profesional",
+    "surgeryStartTime": "HH:MM (inicio de cirugía)",
+    "surgeryEndTime": "HH:MM (término de cirugía)",
+    "diagnosis": "Diagnóstico",
+    "isPlannedSurgery": true,
+    "surgicalTechniques": ["técnica 1", "técnica 2"],
+    "findings": ["hallazgo 1", "hallazgo 2"],
+    "incidents": "Incidentes/accidentes o 'Ninguno'",
+    "anesthesiologist": "Nombre del anestesiólogo",
+    "instrumentist": "Nombre del instrumentista",
+    "circulatingNurse": "Nombre de la enfermera circulante"
   }`,
-  CIRCULATING_NURSE: `{
-    "patient_prep": "preparación del paciente (ej. posición, asepsia)",
-    "equipment_used": ["equipos y monitores utilizados"],
-    "counts": {
-      "sponges_correct": true,
-      "instruments_correct": true,
-      "sharps_correct": true
+  NURSE_NOTE: `{
+    "patientFullName": "Nombre completo del paciente",
+    "age": "Edad",
+    "sex": "Sexo",
+    "dob": "YYYY-MM-DD",
+    "curp": "CURP",
+    "rfc": "RFC",
+    "recordNumber": "Número de expediente",
+    "date": "YYYY-MM-DD",
+    "exactTime": "HH:MM",
+    "professionalIdSignature": "ID o Firma del profesional",
+    "materialsSuppliesAndEquipment": ["Listado de materiales", "insumos", "equipos utilizados"]
+  }`,
+  EVOLUTION: `{
+    "patientFullName": "Nombre completo del paciente",
+    "age": "Edad",
+    "sex": "Sexo",
+    "dob": "YYYY-MM-DD",
+    "curp": "CURP",
+    "rfc": "RFC",
+    "recordNumber": "Número de expediente",
+    "date": "YYYY-MM-DD",
+    "exactTime": "HH:MM",
+    "professionalIdSignature": "ID o Firma del profesional",
+    "consultationReason": "Motivo de consulta",
+    "vitals": {
+      "bloodPressure": "TA",
+      "heartRate": "FC",
+      "respiratoryRate": "FR",
+      "temperature": "Temp"
     },
-    "incidents": "incidentes durante transoperatorio o 'Ninguno'",
-    "fluids": {
-      "iv_fluids_administered": "soluciones administradas",
-      "urine_output": "uresis si aplica"
-    }
+    "physicalExam": "Exploración física",
+    "updatedDiagnoses": ["Diagnóstico actualizado 1"],
+    "clinicalEvolution": "Evolución clínica",
+    "medicalTreatment": "Tratamiento médico indicado"
   }`
 };
 
@@ -93,11 +94,13 @@ async function resolveClinicalCodes(diagnosisText: string | undefined): Promise<
 export async function generateStructuredClinicalNote(
   transcription: string,
   patientContext: string,
-  documentType: 'SOAP' | 'POST_OP' | 'CIRCULATING_NURSE',
+  documentType: DocumentType,
   authorRole: string,
-  authorId: string
+  authorId: string,
+  patientData?: any
 ) {
-  const targetSchema = DOCUMENT_SCHEMAS[documentType] || DOCUMENT_SCHEMAS['SOAP'];
+  const targetSchema = DOCUMENT_SCHEMAS[documentType];
+  if (!targetSchema) throw new Error('Tipo de documento inválido.');
 
   const prompt = `Eres un asistente de documentación clínica automatizada de Auralis Health.
 Tu tarea es convertir una transcripción dictada por un ${authorRole} en un documento estructurado de tipo: ${documentType}.
@@ -179,13 +182,58 @@ ${targetSchema}`;
     throw new Error('La IA Local no devolvió un JSON válido.');
   }
 
+  // --- ENRIQUECIMIENTO Y CRUCE DE BASES DE DATOS (NO SOBREESCRIBIR) ---
+  if (patientData) {
+    // Solo asignar si el paciente tiene el dato, y usar el del LLM como fallback
+    extractedData.patientFullName = patientData.name || extractedData.patientFullName;
+    extractedData.age = patientData.age || extractedData.age;
+    extractedData.sex = patientData.gender || extractedData.sex;
+    extractedData.curp = patientData.curp || extractedData.curp;
+    extractedData.rfc = patientData.rfc || extractedData.rfc;
+    extractedData.dob = patientData.dob || extractedData.dob;
+    
+    // Función helper para derivar Fecha de Nacimiento (YYYY-MM-DD) desde CURP/RFC
+    const deriveDOB = (code: string) => {
+      const datePart = code.substring(4, 10);
+      const yearStr = datePart.substring(0, 2);
+      const month = datePart.substring(2, 4);
+      const day = datePart.substring(4, 6);
+      const year = parseInt(yearStr, 10);
+      const currentYear = new Date().getFullYear() % 100;
+      const fullYear = year > currentYear ? `19${yearStr}` : `20${yearStr}`;
+      return `${fullYear}-${month}-${day}`;
+    };
+
+    if (!extractedData.dob && extractedData.curp && extractedData.curp.length >= 10) {
+      extractedData.dob = deriveDOB(extractedData.curp);
+    } else if (!extractedData.dob && extractedData.rfc && extractedData.rfc.length >= 10) {
+      extractedData.dob = deriveDOB(extractedData.rfc);
+    }
+  }
+
+  // --- VALIDACIÓN DE SALIDA ---
+  let missingKeys: string[] = [];
+  if (documentType === 'POST_OP') {
+    const required = ['patientFullName', 'surgeryStartTime', 'surgeryEndTime', 'diagnosis'];
+    missingKeys = required.filter(key => !(key in extractedData));
+    if (missingKeys.length > 0) throw new Error('La transcripción no contiene suficientes datos para una Nota Postoperatoria');
+  } else if (documentType === 'NURSE_NOTE') {
+    const required = ['patientFullName', 'materialsSuppliesAndEquipment'];
+    missingKeys = required.filter(key => !(key in extractedData));
+    if (missingKeys.length > 0) throw new Error('La transcripción no contiene suficientes datos para una Nota de Enfermería');
+  } else if (documentType === 'EVOLUTION') {
+    const required = ['patientFullName', 'consultationReason', 'clinicalEvolution'];
+    missingKeys = required.filter(key => !(key in extractedData));
+    if (missingKeys.length > 0) throw new Error('La transcripción no contiene suficientes datos para una Nota de Evolución');
+  }
+
   // --- PIPELINE DE RESOLUCIÓN DE CÓDIGOS (Anti-Alucinaciones) ---
   let resolved_codes = {};
-  if (documentType === 'SOAP' && extractedData.assessment?.primary_diagnosis_natural_language) {
-    const codeData = await resolveClinicalCodes(extractedData.assessment.primary_diagnosis_natural_language);
+  if (documentType === 'EVOLUTION' && extractedData.updatedDiagnoses && extractedData.updatedDiagnoses.length > 0) {
+    const codeData = await resolveClinicalCodes(extractedData.updatedDiagnoses[0]);
     resolved_codes = { primary_diagnosis_code: codeData.code, primary_diagnosis_label: codeData.label };
-  } else if (documentType === 'POST_OP' && extractedData.procedure_details?.post_op_diagnosis_natural_language) {
-    const codeData = await resolveClinicalCodes(extractedData.procedure_details.post_op_diagnosis_natural_language);
+  } else if (documentType === 'POST_OP' && extractedData.diagnosis) {
+    const codeData = await resolveClinicalCodes(extractedData.diagnosis);
     resolved_codes = { post_op_diagnosis_code: codeData.code, post_op_diagnosis_label: codeData.label };
   }
 
@@ -246,14 +294,26 @@ Genera en JSON puro (sin markdown):
   }
 }`;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-
   try {
+    const response = await fetch('http://localhost:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama3',
+        prompt: prompt,
+        stream: false,
+        format: 'json'
+      })
+    });
+
+    if (!response.ok) throw new Error(`Ollama Error: ${response.status}`);
+    const result = await response.json();
+    const text = result.response;
+    const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+
     return JSON.parse(cleaned);
-  } catch {
-    console.error('Error parsing discharge documents:', cleaned);
+  } catch (error) {
+    console.error('Error in Ollama generateDischargeDocuments:', error);
     return {
       prescription: { medications: [], general_instructions: 'Error al generar. Revisar manualmente.' },
       discharge_summary: { admission_reason: '-', hospital_course: '-', discharge_condition: '-', discharge_diagnosis: '-', follow_up_instructions: '-' },
@@ -278,6 +338,22 @@ ${context}
 PREGUNTA DEL DOCTOR:
 ${question}`;
 
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  try {
+    const response = await fetch('http://localhost:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama3',
+        prompt: prompt,
+        stream: false
+      })
+    });
+
+    if (!response.ok) throw new Error(`Ollama Error: ${response.status}`);
+    const result = await response.json();
+    return result.response;
+  } catch (error) {
+    console.error('Error in Ollama chatWithContext:', error);
+    return "Lo siento, el modelo de IA local no está disponible o no responde en este momento.";
+  }
 }

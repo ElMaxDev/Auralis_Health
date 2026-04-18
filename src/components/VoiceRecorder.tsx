@@ -96,7 +96,7 @@ export default function VoiceRecorder({ onTranscriptionComplete, onTranscribing,
       }
 
       recognizerRef.current = recognizer;
-      recognizer.start();
+      await recognizer.start();
       setIsRecording(true);
     } catch (err) {
       setError(`Error al iniciar micrófono: ${err}`);

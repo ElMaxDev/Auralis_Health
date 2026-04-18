@@ -39,12 +39,10 @@ function EgresoContent() {
       }
 
       try {
-        const res = await fetch('/api/patients');
+        const res = await fetch(`/api/patients/${patientId}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (data.success) {
-          const found = data.data.find((p: Patient) => p._id === patientId);
-          if (found) setPatient(found);
-        }
+        if (data.success) setPatient(data.data);
       } catch (error) {
         console.error('Error loading patient for egreso:', error);
       }
@@ -62,24 +60,29 @@ function EgresoContent() {
       setDocuments({
         prescription: {
           medications: [
-            { name: 'Paracetamol', dose: '500mg', frequency: 'cada 8 horas', duration: '5 días' },
-            { name: 'Ciprofloxacino', dose: '500mg', frequency: 'cada 12 horas', duration: '7 días' }
+            { name: 'Paracetamol', dose: '500mg', route: 'Oral', frequency: 'cada 8 horas', duration: '5 días' },
+            { name: 'Ciprofloxacino', dose: '500mg', route: 'Oral', frequency: 'cada 12 horas', duration: '7 días' }
           ],
-          instructions: 'Tomar con alimentos. No suspender tratamiento.'
+          general_instructions: 'Tomar con alimentos. No suspender tratamiento.'
         },
         discharge_summary: {
+          admission_reason: 'Dificultad respiratoria y fiebre',
+          hospital_course: 'Tratamiento antibiótico intravenoso con buena respuesta',
           discharge_diagnosis: 'Neumonía adquirida en la comunidad, en resolución.',
           discharge_condition: 'Estable, afebril, con buena saturación de oxígeno.',
           follow_up_instructions: 'Cita en consulta externa en 7 días.'
         },
         patient_instructions: {
-          general_recommendations: 'Reposo en casa, abundantes líquidos.',
-          warning_signs: ['Fiebre mayor a 38.5C', 'Dificultad respiratoria', 'Dolor torácico intenso']
+          diet: 'Líquidos abundantes, dieta blanda',
+          activity: 'Reposo en casa',
+          warning_signs: ['Fiebre mayor a 38.5C', 'Dificultad respiratoria', 'Dolor torácico intenso'],
+          next_appointment: 'En 7 días'
         },
         insurance_form: {
           diagnosis_code: 'J18.9',
           procedure_codes: ['99214'],
-          estimated_cost: 12500
+          length_of_stay: '3 días',
+          total_charges_estimate: '12500 MXN'
         }
       });
       setChecklist(prev => ({
@@ -127,19 +130,27 @@ function EgresoContent() {
     if (patientId?.startsWith('mock-')) {
       await new Promise(resolve => setTimeout(resolve, 2000));
       const mockInsurance: InsuranceSubmission = {
-        _id: 'ins-' + Math.random().toString(36).substr(2, 9),
-        patientId: patientId,
         provider: patient.insuranceProvider,
-        status: 'accepted',
         claimId: 'CLM-' + Math.floor(100000 + Math.random() * 900000),
-        submissionDate: new Date().toISOString(),
-        documentsReceived: 4
+        status: 'received',
+        documentsReceived: 4,
+        estimatedProcessingTime: '3-5 días hábiles',
+        message: 'Documentos recibidos correctamente.',
+        timestamp: new Date().toISOString(),
       };
       setInsurance(mockInsurance);
       setStep('complete');
       const feedback = `Doctor, el egreso del paciente ${patient.name} ha sido completado exitosamente. Documentos enviados a ${patient.insuranceProvider}.`;
       setVoiceFeedback(feedback);
       playVoiceFeedback(feedback);
+      
+      // Marcar como discharged
+      fetch(`/api/patients/${patientId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'discharged' })
+      }).catch(console.error);
+      
       return;
     }
 
@@ -164,6 +175,13 @@ function EgresoContent() {
         playVoiceFeedback(
           `Doctor, el egreso del paciente ${patient.name} ha sido completado. Documentos enviados a ${patient.insuranceProvider}.`
         );
+        
+        // Marcar como discharged
+        fetch(`/api/patients/${patientId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'discharged' })
+        }).catch(console.error);
       }
     } catch {
       alert('Error enviando a aseguradora');
@@ -183,6 +201,8 @@ function EgresoContent() {
         const audioBlob = await res.blob();
         const audioUrl = URL.createObjectURL(audioBlob);
         const audio = new Audio(audioUrl);
+        audio.addEventListener('ended', () => URL.revokeObjectURL(audioUrl));
+        audio.addEventListener('error', () => URL.revokeObjectURL(audioUrl));
         audio.play();
       }
     } catch {
@@ -385,7 +405,10 @@ function EgresoContent() {
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Egreso Completado</h2>
-          <p className="text-white/60 mb-8">Todos los documentos han sido generados, firmados y enviados exitosamente.</p>
+          <p className="text-white/60 mb-4">Todos los documentos han sido generados, firmados y enviados exitosamente.</p>
+          {voiceFeedback && (
+            <p className="text-sm text-primary-300 italic mb-6 max-w-md mx-auto">{voiceFeedback}</p>
+          )}
 
           <div className="bg-black/40 border border-white/10 rounded-2xl p-6 text-left space-y-4 mb-8 max-w-md mx-auto">
             <div className="flex justify-between items-center border-b border-white/5 pb-3">

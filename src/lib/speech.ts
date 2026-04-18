@@ -80,6 +80,7 @@ export function createWebSpeechRecognizer(callbacks: SpeechCallbacks) {
   recognition.interimResults = true;
   recognition.lang = 'es-MX';
   recognition.maxAlternatives = 1;
+  let active = false;
 
   recognition.onresult = (event: { resultIndex: number; results: SpeechRecognitionResultList }) => {
     let interimTranscript = '';
@@ -106,15 +107,17 @@ export function createWebSpeechRecognizer(callbacks: SpeechCallbacks) {
     callbacks.onError(`Web Speech error: ${event.error}`);
   };
 
-  // Auto-restart si se desconecta (Chrome lo hace a veces)
+  // Chrome detiene el reconocimiento tras silencio prolongado; reiniciar si sigue activo
   recognition.onend = () => {
-    // Se reinicia desde el componente si el usuario no presionó stop
+    if (active) {
+      try { recognition.start(); } catch { /* ya reiniciando */ }
+    }
   };
 
   return {
-    start: () => recognition.start(),
-    stop: () => recognition.stop(),
-    dispose: () => recognition.abort(),
+    start: () => { active = true; recognition.start(); },
+    stop: () => { active = false; recognition.stop(); },
+    dispose: () => { active = false; recognition.abort(); },
   };
 }
 

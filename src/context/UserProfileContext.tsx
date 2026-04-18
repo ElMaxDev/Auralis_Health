@@ -63,27 +63,23 @@ const UserProfileContext = createContext<UserProfileContextType>({
  */
 export function UserProfileProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
-  const [loaded, setLoaded] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Cargar perfil desde localStorage al montar el componente
+  // Leer de localStorage en el cliente sin romper la hidratación
   useEffect(() => {
     try {
       const saved = localStorage.getItem('auralis_profile');
-      if (saved) {
-        setProfile(JSON.parse(saved));
-      }
-    } catch (e) {
-      console.error('Error al cargar perfil desde localStorage:', e);
-    }
-    setLoaded(true);
+      if (saved) setProfile(JSON.parse(saved));
+    } catch {}
+    setIsMounted(true);
   }, []);
 
   // Persistir cambios en localStorage
   useEffect(() => {
-    if (loaded) {
+    if (isMounted) {
       localStorage.setItem('auralis_profile', JSON.stringify(profile));
     }
-  }, [profile, loaded]);
+  }, [profile, isMounted]);
 
   /**
    * Actualiza parcialmente el perfil del usuario.

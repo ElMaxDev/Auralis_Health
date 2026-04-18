@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['firebase-admin'],
-  },
+  serverExternalPackages: ['firebase-admin'],
   // Deshabilitar headers que exponen versión de Next.js
   poweredByHeader: false,
   // Headers de seguridad básicos

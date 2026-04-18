@@ -1,52 +1,24 @@
-/**
- * @file login/page.tsx
- * @description Pantalla de inicio de sesion con autenticacion local.
- *
- * Implementa un formulario de login con validacion de credenciales hardcodeadas
- * para el entorno de desarrollo. Al autenticar exitosamente, se establece una
- * cookie "auralis_auth" que el middleware verifica en cada solicitud.
- *
- * Credenciales de desarrollo:
- *   Usuario:    admin
- *   Contrasena: 323205
- *
- * Para produccion, este mecanismo debe reemplazarse por un sistema de
- * autenticacion gestionado (Firebase Auth, Auth0, JWT, etc.).
- */
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AnimatedBackground from '@/components/AnimatedBackground';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg('');
     setIsLoading(true);
-
-    // Simular conexión
-    timerRef.current = setTimeout(() => {
-      if (username === 'admin' && password === '323205') {
-        // Establecer cookie para el middleware
-        document.cookie = 'auralis_auth=true; path=/; max-age=86400'; // 1 día
-        router.push('/');
-      } else {
-        setErrorMsg('Credenciales incorrectas');
-        setIsLoading(false);
-      }
-    }, 1200);
+    
+    // Simular tiempo de carga
+    setTimeout(() => {
+      // Por ahora redirigimos directamente al dashboard (la ruta raíz)
+      router.push('/');
+    }, 1500);
   };
 
   return (
@@ -76,15 +48,15 @@ export default function LoginPage() {
       <form onSubmit={handleLogin} className="space-y-5 relative z-10">
         <div className="space-y-1.5">
           <label className="text-[11px] uppercase tracking-wider text-white/50 font-semibold px-1">
-            Usuario Institucional
+            Correo Institucional
           </label>
           <input
-            type="text"
+            type="email"
             required
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="w-full bg-white/[0.03] border border-white/10 text-white placeholder-white/30 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-1 focus:ring-white/30 focus:bg-white/[0.05] transition-all"
-            placeholder="admin"
+            placeholder="dr@auralis.com"
           />
         </div>
 
@@ -101,12 +73,6 @@ export default function LoginPage() {
             placeholder="••••••••"
           />
         </div>
-
-        {errorMsg && (
-          <div className="text-center text-red-400 text-sm font-medium animate-pulse">
-            {errorMsg}
-          </div>
-        )}
 
         <button
           type="submit"

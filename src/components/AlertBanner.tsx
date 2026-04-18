@@ -18,6 +18,11 @@ export default function AlertBanner({ alerts, onDismiss }: AlertBannerProps) {
   const criticalAlerts = alerts.filter(a => a.severity === 'critical' || a.severity === 'high');
 
   useEffect(() => {
+    if (criticalAlerts.length === 0) return;
+    setCurrentIndex(prev => (prev >= criticalAlerts.length ? 0 : prev));
+  }, [criticalAlerts.length]);
+
+  useEffect(() => {
     if (criticalAlerts.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentIndex(prev => (prev + 1) % criticalAlerts.length);
@@ -27,7 +32,7 @@ export default function AlertBanner({ alerts, onDismiss }: AlertBannerProps) {
 
   if (criticalAlerts.length === 0) return null;
 
-  const current = criticalAlerts[currentIndex];
+  const current = criticalAlerts[currentIndex] ?? criticalAlerts[0];
 
   return (
     <div className={`mb-4 rounded-xl p-3 flex items-center justify-between ${
